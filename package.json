@@ -9,8 +9,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dreki-gg/pi-extensions",
-    "directory": "packages/questionnaire"
+    "url": "git+https://github.com/jalbarrang/pi-questionnaire.git"
   },
   "type": "module",
   "scripts": {
@@ -25,16 +24,20 @@
     ]
   },
   "devDependencies": {
-    "@types/node": "24",
+    "@types/node": "^26.1.1",
     "oxfmt": "^0.43.0",
     "oxlint": "^1.58.0",
-    "typescript": "^6.0.0"
+    "typescript": "^5.9.0",
+    "@earendil-works/pi-ai": "^0.75.4",
+    "@earendil-works/pi-coding-agent": "^0.75.4",
+    "@earendil-works/pi-tui": "^0.75.4",
+    "typebox": "^1.0.55"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*",
-    "typebox": "*"
+    "@earendil-works/pi-ai": "^0.75.4",
+    "@earendil-works/pi-coding-agent": "^0.75.4",
+    "@earendil-works/pi-tui": "^0.75.4",
+    "typebox": "^1.0.55"
   },
   "peerDependenciesMeta": {
     "@earendil-works/pi-ai": {
