@@ -1,5 +1,12 @@
 # @dreki-gg/pi-questionnaire
 
+## [0.2.8](https://github.com/jalbarrang/pi-questionnaire/compare/v0.2.7...v0.2.8) (2026-07-12)
+
+
+### Bug Fixes
+
+* **deps:** bump dependencies to latest ([#2](https://github.com/jalbarrang/pi-questionnaire/issues/2)) ([4678352](https://github.com/jalbarrang/pi-questionnaire/commit/46783521324c041daa53b4e71a2444832d885576))
+
 ## 0.2.6
 
 ### Patch Changes
