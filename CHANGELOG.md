@@ -1,5 +1,12 @@
 # @dreki-gg/pi-questionnaire
 
+## [0.3.0](https://github.com/jalbarrang/pi-questionnaire/compare/v0.2.8...v0.3.0) (2026-08-06)
+
+
+### Features
+
+* add questionnaire review context input ([fb2f492](https://github.com/jalbarrang/pi-questionnaire/commit/fb2f492c645fba5ffe2d39fad7e5851793ea6461))
+
 ## [0.2.8](https://github.com/jalbarrang/pi-questionnaire/compare/v0.2.7...v0.2.8) (2026-07-12)
 
 
