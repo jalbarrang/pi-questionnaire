@@ -1,0 +1,28 @@
+version: 2
+
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: cron
+      cronjob: "0 6 * * *"
+      timezone: UTC
+    commit-message:
+      prefix: fix
+      include: scope
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: fix
+      include: scope
+    groups:
+      all-actions:
+        patterns:
+          - "*"
