@@ -56,6 +56,7 @@ Validation includes:
     otherText: string | null;
     wasOtherSelected: boolean;
   }>;
+  context: string | null;
   cancelled: boolean;
 }
 ```
@@ -66,20 +67,22 @@ Validation includes:
 Other: "GraphQL"
 ```
 
+The Review tab also includes an optional `Anything else?` field. Its trimmed value is returned as `context`, or `null` when left empty.
+
 ## Keyboard model
 
 - `← / →`: switch tabs (question tabs + Review tab)
-- `↑ / ↓`: move option cursor (question tab) or row cursor (Review tab)
+- `↑ / ↓`: move option cursor (question tab) or row cursor (Review tab, including `Anything else?`)
 - `Space`:
   - question tab: select/toggle option or enter Other input
-  - review tab: jump to selected question for editing
+  - review tab: jump to the selected question for editing, or open `Anything else?`
 - `r`: jump to Review tab
 - `Esc` hierarchy:
-  1. exit Other input mode
-  2. from Review, go back to prior question tab
+  1. exit Other or `Anything else?` input mode
+  2. from Review, go back to the prior question tab
   3. from question tab outermost, cancel questionnaire
 - `Enter`:
-  - in Other editor: submit typed text
+  - in an editor: submit the current text
   - in Review: submit only when all required answers are valid
 
 ## Example tool call

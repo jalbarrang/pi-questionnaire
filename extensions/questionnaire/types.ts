@@ -37,6 +37,7 @@ export interface NormalizedAnswer {
 export interface QuestionnaireResult {
   questions: NormalizedQuestion[];
   answers: NormalizedAnswer[];
+  context: string | null;
   cancelled: boolean;
   error?: string;
 }
@@ -47,10 +48,13 @@ export interface QuestionSelectionState {
   wasOtherSelected: boolean;
 }
 
-export const QuestionnaireInputModeSchema = StringEnum(['navigate', 'otherInput'] as const, {
-  description: 'Current input mode for questionnaire UI state.',
-  default: 'navigate',
-});
+export const QuestionnaireInputModeSchema = StringEnum(
+  ['navigate', 'otherInput', 'contextInput'] as const,
+  {
+    description: 'Current input mode for questionnaire UI state.',
+    default: 'navigate',
+  },
+);
 
 export type QuestionnaireInputMode = Static<typeof QuestionnaireInputModeSchema>;
 
@@ -63,5 +67,6 @@ export interface QuestionnaireUIState {
   editingQuestionId?: string;
   returnToReview: boolean;
   returnReviewCursor: number;
+  contextText: string;
   questionStateById: Record<string, QuestionSelectionState>;
 }

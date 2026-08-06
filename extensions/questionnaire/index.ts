@@ -16,6 +16,7 @@ function emptyResult(error?: string): QuestionnaireResult {
   return {
     questions: [],
     answers: [],
+    context: null,
     cancelled: true,
     ...(error ? { error } : {}),
   };
@@ -96,7 +97,7 @@ export default function questionnaireExtension(pi: ExtensionAPI) {
     name: 'questionnaire',
     label: 'Questionnaire',
     description:
-      'Collect 1-5 structured user answers in a single interactive questionnaire flow. Supports single and multi-select prompts with optional Other text.',
+      'Collect 1-5 structured user answers in a single interactive questionnaire flow. Supports single and multi-select prompts with optional Other text and additional context from the Review tab.',
     promptSnippet:
       'Gather explicit user choices with a structured questionnaire before proceeding with implementation or planning.',
     promptGuidelines: [
@@ -119,6 +120,7 @@ export default function questionnaireExtension(pi: ExtensionAPI) {
         return buildErrorResult('UI not available (running in non-interactive mode).', {
           questions: normalizedQuestions,
           answers: [],
+          context: null,
           cancelled: true,
           error: 'UI not available (running in non-interactive mode).',
         });

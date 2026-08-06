@@ -166,10 +166,17 @@ export function formatAnswerValue(answer: NormalizedAnswer): string {
   return '—';
 }
 
+function formatContextLine(result: QuestionnaireResult): string | undefined {
+  const context = result.context?.trim();
+  return context ? `Anything else: ${context}` : undefined;
+}
+
 export function formatCompletedSummary(result: QuestionnaireResult): string {
   const parts = result.answers.map(
     (answer) => `${answer.questionLabel}: ${formatAnswerValue(answer)}`,
   );
+  const contextLine = formatContextLine(result);
+  if (contextLine) parts.push(contextLine);
   return `✓ ${parts.join(' • ')}`;
 }
 
@@ -178,7 +185,12 @@ export function formatCancelledSummary(): string {
 }
 
 export function formatExpandedAnswerLines(result: QuestionnaireResult): string[] {
-  return result.answers.map((answer) => `${answer.questionLabel}: ${formatAnswerValue(answer)}`);
+  const lines = result.answers.map(
+    (answer) => `${answer.questionLabel}: ${formatAnswerValue(answer)}`,
+  );
+  const contextLine = formatContextLine(result);
+  if (contextLine) lines.push(contextLine);
+  return lines;
 }
 
 export function formatToolContentSummary(result: QuestionnaireResult): string {

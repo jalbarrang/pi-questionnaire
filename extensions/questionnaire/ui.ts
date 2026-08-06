@@ -111,6 +111,7 @@ export async function runQuestionnaireUI(
       editingQuestionId: undefined,
       returnToReview: false,
       returnReviewCursor: 0,
+      contextText: '',
       questionStateById: createInitialQuestionStateById(questions),
     };
 
@@ -131,12 +132,18 @@ export async function runQuestionnaireUI(
     let cachedLines: string[] | undefined;
 
     editor.onSubmit = (value) => {
+      if (uiState.inputMode === 'contextInput') {
+        uiState.contextText = value.trim();
+        clearInputMode();
+        invalidate();
+        return;
+      }
+
       if (!uiState.editingQuestionId) return;
       const selection = ensureQuestionState(uiState.questionStateById, uiState.editingQuestionId);
       selection.wasOtherSelected = true;
       selection.otherText = value.trim();
-      uiState.inputMode = 'navigate';
-      uiState.editingQuestionId = undefined;
+      clearInputMode();
       invalidate();
     };
 
@@ -150,6 +157,7 @@ export async function runQuestionnaireUI(
       done({
         questions,
         answers: normalizeAnswers(questions, uiState.questionStateById),
+        context: uiState.contextText.trim() || null,
         cancelled,
       });
     }
@@ -189,11 +197,7 @@ export async function runQuestionnaireUI(
       }
 
       if (uiState.returnToReview) {
-        uiState.reviewCursor = clamp(
-          uiState.returnReviewCursor,
-          0,
-          Math.max(0, questions.length - 1),
-        );
+        uiState.reviewCursor = clamp(uiState.returnReviewCursor, 0, Math.max(0, questions.length));
       }
 
       uiState.returnToReview = false;
@@ -234,6 +238,14 @@ export async function runQuestionnaireUI(
     }
 
     function jumpFromReviewToQuestion() {
+      if (uiState.reviewCursor === questions.length) {
+        uiState.returnToReview = false;
+        uiState.inputMode = 'contextInput';
+        editor.setText(uiState.contextText);
+        invalidate();
+        return;
+      }
+
       const targetIndex = clamp(uiState.reviewCursor, 0, Math.max(0, questions.length - 1));
       uiState.returnReviewCursor = targetIndex;
       uiState.returnToReview = true;
@@ -258,7 +270,7 @@ export async function runQuestionnaireUI(
     }
 
     function handleInput(data: string) {
-      if (uiState.inputMode === 'otherInput') {
+      if (uiState.inputMode !== 'navigate') {
         if (matchesKey(data, Key.escape)) {
           clearInputMode();
           invalidate();
@@ -285,22 +297,16 @@ export async function runQuestionnaireUI(
       }
 
       if (uiState.activeTabIndex === reviewTabIndex) {
+        const reviewCursorMax = Math.max(0, questions.length);
+
         if (matchesKey(data, Key.up)) {
-          uiState.reviewCursor = clamp(
-            uiState.reviewCursor - 1,
-            0,
-            Math.max(0, questions.length - 1),
-          );
+          uiState.reviewCursor = clamp(uiState.reviewCursor - 1, 0, reviewCursorMax);
           invalidate();
           return;
         }
 
         if (matchesKey(data, Key.down)) {
-          uiState.reviewCursor = clamp(
-            uiState.reviewCursor + 1,
-            0,
-            Math.max(0, questions.length - 1),
-          );
+          uiState.reviewCursor = clamp(uiState.reviewCursor + 1, 0, reviewCursorMax);
           invalidate();
           return;
         }
@@ -458,6 +464,22 @@ export async function runQuestionnaireUI(
         );
       }
 
+      const contextCursor =
+        uiState.reviewCursor === questions.length ? theme.fg('accent', '> ') : '  ';
+      const context = uiState.contextText.trim();
+      const contextLabel = context
+        ? theme.fg('text', `Anything else: ${context}`)
+        : theme.fg('muted', 'Anything else? (optional)');
+      pushWrappedWithPrefix(lines, contextCursor, contextLabel, width);
+
+      if (uiState.inputMode === 'contextInput') {
+        lines.push('');
+        pushWrappedText(lines, theme.fg('muted', 'Add any extra context:'), width);
+        for (const line of editor.render(Math.max(10, width - 2))) {
+          lines.push(truncateToWidth(` ${line}`, width));
+        }
+      }
+
       lines.push('');
       pushWrappedText(
         lines,
@@ -473,6 +495,8 @@ export async function runQuestionnaireUI(
 
       if (uiState.inputMode === 'otherInput') {
         hint = 'Enter submits Other text • Esc exits input mode';
+      } else if (uiState.inputMode === 'contextInput') {
+        hint = 'Enter saves Anything else? text • Esc cancels editing';
       } else if (uiState.activeTabIndex === reviewTabIndex) {
         hint = '←→ tabs • ↑↓ review row • Space edit • Enter submit • Esc back';
       } else if (uiState.returnToReview) {
@@ -491,6 +515,7 @@ export async function runQuestionnaireUI(
       }
 
       const lines: string[] = [];
+      editor.focused = uiState.inputMode !== 'navigate';
 
       renderTabs(width, lines);
 
