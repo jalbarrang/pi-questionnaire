@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      retry_publish:
+        description: Publish the current main version when no new release is created
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -23,7 +30,7 @@ jobs:
 
   publish:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    if: needs.release-please.outputs.release_created == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.retry_publish)
     runs-on: ubuntu-latest
     permissions:
       contents: read
