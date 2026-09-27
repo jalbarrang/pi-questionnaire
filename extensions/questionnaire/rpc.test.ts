@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+import { CARD_ANSWER_PREFIX } from './card.js';
 import { normalizeQuestions } from './format.js';
 import { runQuestionnaireRpc, type QuestionnaireDialogs } from './rpc.js';
 import type { NormalizedQuestion, QuestionInput } from './types.js';
@@ -9,19 +10,38 @@ const OTHER = 'Other (type your own)…';
 const BACK = '← Back';
 const FINISH = 'Finish ✓';
 
-/** A stand-in for `ctx.ui` that answers dialogs from a scripted queue. */
-function fakeUi(selects: (string | undefined)[], inputs: (string | undefined)[] = []) {
+/**
+ * A stand-in for `ctx.ui` that answers dialogs from a scripted queue.
+ *
+ * The first select is always the card probe: the default `cardAnswer` is an
+ * unrecognised value, so the flow falls through to the stepper and `selects`
+ * drives that. The probe is kept out of `selectCalls` so stepper assertions read
+ * as if the card did not exist.
+ */
+function fakeUi(
+  selects: (string | undefined)[],
+  inputs: (string | undefined)[] = [],
+  cardAnswer: string | undefined = 'unsupported',
+) {
   const selectCalls: { title: string; options: string[] }[] = [];
+  const cardCalls: { title: string; options: string[] }[] = [];
+  let probed = false;
 
   const ui: QuestionnaireDialogs = {
     select: (title, options) => {
+      if (!probed) {
+        probed = true;
+        cardCalls.push({ title, options });
+        return Promise.resolve(cardAnswer);
+      }
+
       selectCalls.push({ title, options });
       return Promise.resolve(selects.shift());
     },
     input: () => Promise.resolve(inputs.shift()),
   };
 
-  return { ui, selectCalls };
+  return { ui, selectCalls, cardCalls };
 }
 
 function normalize(input: QuestionInput[]): NormalizedQuestion[] {
@@ -151,5 +171,43 @@ describe('runQuestionnaireRpc', () => {
     const result = await runQuestionnaireRpc({ ui }, singleQuestion);
 
     expect(result.context).toBeNull();
+  });
+
+  test('uses a card answer when the client speaks the convention', async () => {
+    const answer = {
+      answers: [{ id: 'scope', values: ['high'], other: null }],
+      context: 'nice',
+      cancelled: false,
+    };
+    const { ui, selectCalls, cardCalls } = fakeUi(
+      [],
+      [],
+      `${CARD_ANSWER_PREFIX}${JSON.stringify(answer)}`,
+    );
+
+    const result = await runQuestionnaireRpc({ ui }, singleQuestion);
+
+    expect(result.answers[0]?.selectedOptions).toEqual([{ value: 'high', label: 'High' }]);
+    expect(result.context).toBe('nice');
+    expect(cardCalls[0]?.options).toHaveLength(1);
+    expect(selectCalls).toEqual([]);
+  });
+
+  test('falls back to the stepper when the client does not understand the card', async () => {
+    const { ui, selectCalls, cardCalls } = fakeUi(['○ High']);
+
+    const result = await runQuestionnaireRpc({ ui }, singleQuestion);
+
+    expect(result.answers[0]?.selectedOptions).toEqual([{ value: 'high', label: 'High' }]);
+    expect(cardCalls).toHaveLength(1);
+    expect(selectCalls).toHaveLength(1);
+  });
+
+  test('cancels when the card select is dismissed', async () => {
+    const { ui } = fakeUi([], [], undefined);
+
+    const result = await runQuestionnaireRpc({ ui }, singleQuestion);
+
+    expect(result.cancelled).toBe(true);
   });
 });
