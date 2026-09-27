@@ -131,7 +131,22 @@ Cancelled:
 ⚠ Cancelled
 ```
 
+## Modes
+
+The questionnaire runs in whatever UI Pi provides:
+
+- **Interactive (TUI):** the tabbed component with keyboard navigation described
+  above.
+- **RPC (for example the Pi VS Code panel):** one dialog per question. `Select`
+  lists the options, an `Other` choice opens a text input, a multi-select question
+  toggles options and finishes on `Done`, and a final input collects the optional
+  `Anything else?` context. `ctx.ui.custom()` is undefined outside the TUI, which
+  is why RPC mode uses Pi's dialog methods instead.
+
+The result shape is identical in both modes.
+
 ## Cancellation and non-interactive behavior
 
 - User cancellation is **not treated as an error** (`cancelled: true` in details).
-- Non-interactive mode (`!ctx.hasUI`) returns an immediate error result (`isError: true`).
+- Modes without a UI (`ctx.hasUI === false`) return an immediate error result
+  (`isError: true`).
