@@ -30,7 +30,14 @@ jobs:
 
   publish:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.retry_publish)
+    # `always()` lets the manual recovery publish even when release-please fails;
+    # the condition below still gates it to a real release or an explicit retry.
+    if: >-
+      always() &&
+      (
+        needs.release-please.outputs.release_created == 'true' ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.retry_publish)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
