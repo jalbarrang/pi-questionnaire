@@ -4,9 +4,10 @@ import { normalizeQuestions } from './format.js';
 import { runQuestionnaireRpc, type QuestionnaireDialogs } from './rpc.js';
 import type { NormalizedQuestion, QuestionInput } from './types.js';
 
-/** The labels the RPC flow renders for the free-text and finish choices. */
+/** Navigation and free-text choices the RPC flow renders. */
 const OTHER = 'Other (type your own)…';
-const DONE = 'Done';
+const BACK = '← Back';
+const FINISH = 'Finish ✓';
 
 /** A stand-in for `ctx.ui` that answers dialogs from a scripted queue. */
 function fakeUi(selects: (string | undefined)[], inputs: (string | undefined)[] = []) {
@@ -39,6 +40,25 @@ const singleQuestion = normalize([
   },
 ]);
 
+const twoQuestions = normalize([
+  {
+    id: 'scope',
+    prompt: 'What is the scope?',
+    options: [
+      { value: 'low', label: 'Low' },
+      { value: 'high', label: 'High' },
+    ],
+  },
+  {
+    id: 'ship',
+    prompt: 'Should we ship?',
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+  },
+]);
+
 const multiQuestion = normalize([
   {
     id: 'areas',
@@ -53,19 +73,19 @@ const multiQuestion = normalize([
 ]);
 
 describe('runQuestionnaireRpc', () => {
-  test('records the chosen option and asks with the prompt', async () => {
-    const { ui, selectCalls } = fakeUi(['High']);
+  test('records the chosen option and numbers the step', async () => {
+    const { ui, selectCalls } = fakeUi(['○ High']);
 
     const result = await runQuestionnaireRpc({ ui }, singleQuestion);
 
     expect(result.cancelled).toBe(false);
     expect(result.answers[0]?.selectedOptions).toEqual([{ value: 'high', label: 'High' }]);
-    expect(selectCalls[0]?.title).toBe('What is the scope?');
-    expect(selectCalls[0]?.options).toEqual(['Low', 'High', OTHER]);
+    expect(selectCalls[0]?.title).toBe('Question 1 of 1: What is the scope?');
+    expect(selectCalls[0]?.options).toEqual(['○ Low', '○ High', `○ ${OTHER}`]);
   });
 
   test('maps an Other choice to free text', async () => {
-    const { ui } = fakeUi([OTHER], ['GraphQL']);
+    const { ui } = fakeUi([`○ ${OTHER}`], ['GraphQL']);
 
     const result = await runQuestionnaireRpc({ ui }, singleQuestion);
 
@@ -83,8 +103,22 @@ describe('runQuestionnaireRpc', () => {
     expect(result.answers[0]?.selectedOptions).toEqual([]);
   });
 
-  test('toggles several options and finishes on Done', async () => {
-    const { ui } = fakeUi(['[ ] Low', '[ ] High', DONE]);
+  test('goes back to a previous step with its answer prefilled', async () => {
+    const { ui, selectCalls } = fakeUi(['○ High', BACK, '● High', '○ Yes']);
+
+    const result = await runQuestionnaireRpc({ ui }, twoQuestions);
+
+    expect(result.answers.map((answer) => answer.selectedOptions[0]?.value)).toEqual([
+      'high',
+      'yes',
+    ]);
+    // The return to step one marks the previous choice instead of starting over.
+    expect(selectCalls[2]?.title).toBe('Question 1 of 2: What is the scope?');
+    expect(selectCalls[2]?.options).toContain('● High');
+  });
+
+  test('toggles several options and finishes on Finish', async () => {
+    const { ui } = fakeUi(['[ ] Low', '[ ] High', FINISH]);
 
     const result = await runQuestionnaireRpc({ ui }, multiQuestion);
 
@@ -95,7 +129,7 @@ describe('runQuestionnaireRpc', () => {
   });
 
   test('keeps an Other answer in a multi question', async () => {
-    const { ui } = fakeUi([`[ ] ${OTHER}`, DONE], ['graphql']);
+    const { ui } = fakeUi([`[ ] ${OTHER}`, FINISH], ['graphql']);
 
     const result = await runQuestionnaireRpc({ ui }, multiQuestion);
 
@@ -104,7 +138,7 @@ describe('runQuestionnaireRpc', () => {
   });
 
   test('returns the optional context', async () => {
-    const { ui } = fakeUi(['High'], ['be careful']);
+    const { ui } = fakeUi(['○ High'], ['be careful']);
 
     const result = await runQuestionnaireRpc({ ui }, singleQuestion);
 
@@ -112,7 +146,7 @@ describe('runQuestionnaireRpc', () => {
   });
 
   test('leaves context null when skipped', async () => {
-    const { ui } = fakeUi(['High']);
+    const { ui } = fakeUi(['○ High']);
 
     const result = await runQuestionnaireRpc({ ui }, singleQuestion);
 

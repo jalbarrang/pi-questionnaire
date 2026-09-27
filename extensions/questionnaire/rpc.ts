@@ -15,35 +15,48 @@ export interface QuestionnaireDialogs {
 /** The choice that opens free-text "Other" input. */
 const OTHER_CHOICE = 'Other (type your own)…';
 
-/** The choice that finishes a multi-select question. */
-const DONE_CHOICE = 'Done';
+/** Navigation choices a step adds to its own options. */
+const BACK_CHOICE = '← Back';
+const CONTINUE_CHOICE = 'Continue →';
+const FINISH_CHOICE = 'Finish ✓';
+
+/** How the user left a step. */
+type StepAction = 'next' | 'back' | 'cancelled';
 
 /** What picking a rendered choice does. */
-type Choice =
+type StepChoice =
   | { readonly kind: 'listed'; readonly option: QuestionOption }
   | { readonly kind: 'other' }
-  | { readonly kind: 'done' };
+  | { readonly kind: 'back' }
+  | { readonly kind: 'advance' };
 
 /**
  * Runs the questionnaire through Pi's dialog methods.
  *
  * `ctx.ui.custom()` is undefined outside the TUI, so the tabbed component in
- * `ui.ts` cannot run in RPC mode. This asks the same questions one dialog at a
- * time and returns the same result shape, so callers do not care which ran.
+ * `ui.ts` cannot run in RPC mode. This walks the questions one dialog at a time
+ * and keeps every answer, so Back returns to a step with its selection intact.
+ * It returns the same result shape as the TUI, so callers do not care which ran.
  */
 export async function runQuestionnaireRpc(
   ctx: { ui: QuestionnaireDialogs },
   questions: NormalizedQuestion[],
 ): Promise<QuestionnaireResult> {
   const stateById = createInitialQuestionStateById(questions);
+  let index = 0;
 
-  for (const question of questions) {
-    const state = await askQuestion(ctx.ui, question);
+  while (index >= 0 && index < questions.length) {
+    const question = questions[index];
+    const step = { index, total: questions.length };
+    const action =
+      question.selectionMode === 'multiple'
+        ? await askMultiple(ctx.ui, question, step, stateById[question.id])
+        : await askSingle(ctx.ui, question, step, stateById[question.id]);
 
     // A dismissed select cancels the questionnaire, matching Escape in the TUI.
-    if (state === undefined) return result(questions, stateById, null, true);
+    if (action === 'cancelled') return result(questions, stateById, null, true);
 
-    stateById[question.id] = state;
+    index += action === 'back' ? -1 : 1;
   }
 
   const context = await askContext(ctx.ui);
@@ -60,61 +73,78 @@ function result(
   return { questions, answers: normalizeAnswers(questions, stateById), context, cancelled };
 }
 
-async function askQuestion(
-  ui: QuestionnaireDialogs,
-  question: NormalizedQuestion,
-): Promise<QuestionSelectionState | undefined> {
-  return question.selectionMode === 'multiple'
-    ? askMultiple(ui, question)
-    : askSingle(ui, question);
-}
-
+/** A single-select step advances as soon as an option is chosen. */
 async function askSingle(
   ui: QuestionnaireDialogs,
   question: NormalizedQuestion,
-): Promise<QuestionSelectionState | undefined> {
+  step: { index: number; total: number },
+  state: QuestionSelectionState,
+): Promise<StepAction> {
   const choices = listedChoices(question);
-  const labels = choices.map((choice) => choice.label);
-
-  if (question.allowOther) labels.push(OTHER_CHOICE);
 
   for (;;) {
-    const picked = await ui.select(question.prompt, labels);
+    const labels: string[] = [];
+    const byLabel = new Map<string, StepChoice>();
 
-    if (picked === undefined) return undefined;
+    for (const choice of choices) {
+      const selected = state.listedSelectedValues.includes(choice.option.value);
+      const label = `${selected ? '●' : '○'} ${choice.label}`;
+      labels.push(label);
+      byLabel.set(label, { kind: 'listed', option: choice.option });
+    }
 
-    if (picked === OTHER_CHOICE) {
+    if (question.allowOther) {
+      const label = `${state.wasOtherSelected ? '●' : '○'} ${otherLabel(state)}`;
+      labels.push(label);
+      byLabel.set(label, { kind: 'other' });
+    }
+
+    addBackChoice(labels, byLabel, step.index);
+
+    const picked = await ui.select(stepTitle(step, question.prompt), labels);
+
+    if (picked === undefined) return 'cancelled';
+
+    const choice = byLabel.get(picked);
+
+    if (choice === undefined) continue;
+    if (choice.kind === 'back') return 'back';
+
+    if (choice.kind === 'other') {
       const text = await ui.input(question.prompt, 'Type your answer');
 
       // Backing out or submitting nothing returns to the choices, as in the TUI.
       if (text === undefined || text.trim().length === 0) continue;
 
-      return { listedSelectedValues: [], otherText: text, wasOtherSelected: true };
+      state.listedSelectedValues = [];
+      state.otherText = text;
+      state.wasOtherSelected = true;
+
+      return 'next';
     }
 
-    const option = choices.find((choice) => choice.label === picked)?.option;
+    if (choice.kind === 'listed') {
+      state.listedSelectedValues = [choice.option.value];
+      state.otherText = '';
+      state.wasOtherSelected = false;
 
-    if (option === undefined) continue;
-
-    return { listedSelectedValues: [option.value], otherText: '', wasOtherSelected: false };
+      return 'next';
+    }
   }
 }
 
+/** A multi-select step toggles options and advances on Continue or Finish. */
 async function askMultiple(
   ui: QuestionnaireDialogs,
   question: NormalizedQuestion,
-): Promise<QuestionSelectionState | undefined> {
-  const state: QuestionSelectionState = {
-    listedSelectedValues: [],
-    otherText: '',
-    wasOtherSelected: false,
-  };
-
+  step: { index: number; total: number },
+  state: QuestionSelectionState,
+): Promise<StepAction> {
   const choices = listedChoices(question);
 
   for (;;) {
     const labels: string[] = [];
-    const byLabel = new Map<string, Choice>();
+    const byLabel = new Map<string, StepChoice>();
 
     for (const choice of choices) {
       const selected = state.listedSelectedValues.includes(choice.option.value);
@@ -129,20 +159,24 @@ async function askMultiple(
       byLabel.set(label, { kind: 'other' });
     }
 
-    // Only offer Done once the answer is valid, so the question cannot be skipped.
+    addBackChoice(labels, byLabel, step.index);
+
+    // Only offer Continue once the answer is valid, so the question cannot be skipped.
     if (isAnswerValid(question, state)) {
-      labels.push(DONE_CHOICE);
-      byLabel.set(DONE_CHOICE, { kind: 'done' });
+      const advance = step.index === step.total - 1 ? FINISH_CHOICE : CONTINUE_CHOICE;
+      labels.push(advance);
+      byLabel.set(advance, { kind: 'advance' });
     }
 
-    const picked = await ui.select(question.prompt, labels);
+    const picked = await ui.select(stepTitle(step, question.prompt), labels);
 
-    if (picked === undefined) return undefined;
+    if (picked === undefined) return 'cancelled';
 
     const choice = byLabel.get(picked);
 
     if (choice === undefined) continue;
-    if (choice.kind === 'done') return state;
+    if (choice.kind === 'back') return 'back';
+    if (choice.kind === 'advance') return 'next';
 
     if (choice.kind === 'other') {
       const text = await ui.input(question.prompt, 'Type your answer');
@@ -154,8 +188,20 @@ async function askMultiple(
       continue;
     }
 
-    toggle(state, choice.option.value);
+    if (choice.kind === 'listed') toggle(state, choice.option.value);
   }
+}
+
+function addBackChoice(labels: string[], byLabel: Map<string, StepChoice>, index: number): void {
+  if (index === 0) return;
+
+  labels.push(BACK_CHOICE);
+  byLabel.set(BACK_CHOICE, { kind: 'back' });
+}
+
+/** The step's prompt, shown with its position so Back and Continue make sense. */
+function stepTitle(step: { index: number; total: number }, prompt: string): string {
+  return `Question ${step.index + 1} of ${step.total}: ${prompt}`;
 }
 
 function toggle(state: QuestionSelectionState, value: string): void {

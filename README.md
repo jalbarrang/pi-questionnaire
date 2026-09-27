@@ -137,11 +137,13 @@ The questionnaire runs in whatever UI Pi provides:
 
 - **Interactive (TUI):** the tabbed component with keyboard navigation described
   above.
-- **RPC (for example the Pi VS Code panel):** one dialog per question. `Select`
-  lists the options, an `Other` choice opens a text input, a multi-select question
-  toggles options and finishes on `Done`, and a final input collects the optional
-  `Anything else?` context. `ctx.ui.custom()` is undefined outside the TUI, which
-  is why RPC mode uses Pi's dialog methods instead.
+- **RPC (for example the Pi VS Code panel):** a step per question, titled
+  `Question 2 of 3`. `Select` lists the options, an `Other` choice opens a text
+  input, and `← Back` returns to the previous step with its answer prefilled. A
+  multi-select question toggles options and continues on `Continue`; the last
+  step finishes on `Finish`. A final input collects the optional `Anything else?`
+  context. `ctx.ui.custom()` is undefined outside the TUI, which is why RPC mode
+  uses Pi's dialog methods instead.
 
 The result shape is identical in both modes.
 
