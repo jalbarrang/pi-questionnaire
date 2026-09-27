@@ -1,3 +1,4 @@
+import { decodeCardAnswer, encodeCardRequest, type CardAnswer, type CardRequest } from './card.js';
 import { createInitialQuestionStateById, isAnswerValid, normalizeAnswers } from './format.js';
 import type {
   NormalizedQuestion,
@@ -14,6 +15,9 @@ export interface QuestionnaireDialogs {
 
 /** The choice that opens free-text "Other" input. */
 const OTHER_CHOICE = 'Other (type your own)…';
+
+/** Title of the card select; the whole questionnaire rides in its one option. */
+const CARD_TITLE = 'Questionnaire';
 
 /** Navigation choices a step adds to its own options. */
 const BACK_CHOICE = '← Back';
@@ -42,6 +46,82 @@ export async function runQuestionnaireRpc(
   ctx: { ui: QuestionnaireDialogs },
   questions: NormalizedQuestion[],
 ): Promise<QuestionnaireResult> {
+  // A client that speaks the card convention renders one form and answered every
+  // question already; anything else falls through to the stepper below.
+  const card = await askWithCard(ctx.ui, questions);
+
+  if (card !== undefined) return card;
+
+  return runStepper(ctx.ui, questions);
+}
+
+/**
+ * Asks the whole questionnaire as one card select.
+ *
+ * Returns `undefined` when the client answered with something other than a card
+ * answer, which means it does not know the convention and should get the stepper.
+ */
+async function askWithCard(
+  ui: QuestionnaireDialogs,
+  questions: NormalizedQuestion[],
+): Promise<QuestionnaireResult | undefined> {
+  const answer = await ui.select(CARD_TITLE, [encodeCardRequest(toCardRequest(questions))]);
+
+  if (answer === undefined) {
+    return result(questions, createInitialQuestionStateById(questions), null, true);
+  }
+
+  const decoded = decodeCardAnswer(answer);
+
+  if (decoded === undefined) return undefined;
+
+  return cardResult(questions, decoded);
+}
+
+function cardResult(questions: NormalizedQuestion[], answer: CardAnswer): QuestionnaireResult {
+  const stateById = createInitialQuestionStateById(questions);
+
+  for (const entry of answer.answers) {
+    const state = stateById[entry.id];
+
+    if (state === undefined) continue;
+
+    state.listedSelectedValues = entry.values;
+    state.otherText = entry.other ?? '';
+    state.wasOtherSelected = entry.other !== null && entry.other.trim().length > 0;
+  }
+
+  return {
+    questions,
+    answers: normalizeAnswers(questions, stateById),
+    context: answer.context,
+    cancelled: answer.cancelled,
+  };
+}
+
+function toCardRequest(questions: NormalizedQuestion[]): CardRequest {
+  return {
+    title: 'Questions',
+    questions: questions.map((question) => ({
+      id: question.id,
+      label: question.label,
+      prompt: question.prompt,
+      selectionMode: question.selectionMode,
+      allowOther: question.allowOther,
+      options: question.options.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.description,
+      })),
+    })),
+  };
+}
+
+/** One question per dialog, for clients that do not render the card. */
+async function runStepper(
+  ui: QuestionnaireDialogs,
+  questions: NormalizedQuestion[],
+): Promise<QuestionnaireResult> {
   const stateById = createInitialQuestionStateById(questions);
   let index = 0;
 
@@ -50,8 +130,8 @@ export async function runQuestionnaireRpc(
     const step = { index, total: questions.length };
     const action =
       question.selectionMode === 'multiple'
-        ? await askMultiple(ctx.ui, question, step, stateById[question.id])
-        : await askSingle(ctx.ui, question, step, stateById[question.id]);
+        ? await askMultiple(ui, question, step, stateById[question.id])
+        : await askSingle(ui, question, step, stateById[question.id]);
 
     // A dismissed select cancels the questionnaire, matching Escape in the TUI.
     if (action === 'cancelled') return result(questions, stateById, null, true);
@@ -59,7 +139,7 @@ export async function runQuestionnaireRpc(
     index += action === 'back' ? -1 : 1;
   }
 
-  const context = await askContext(ctx.ui);
+  const context = await askContext(ui);
 
   return result(questions, stateById, context, false);
 }
