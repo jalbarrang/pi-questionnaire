@@ -1,4 +1,4 @@
-import type { ExtensionAPI, Theme } from '@earendil-works/pi-coding-agent';
+import type { ExtensionAPI, ExtensionContext, Theme } from '@earendil-works/pi-coding-agent';
 import { Container, Spacer, Text } from '@earendil-works/pi-tui';
 import {
   formatCancelledSummary,
@@ -8,9 +8,31 @@ import {
   normalizeQuestions,
   validateQuestions,
 } from './format.js';
+import { runQuestionnaireRpc } from './rpc.js';
 import { QuestionnaireParamsSchema } from './schema.js';
-import type { QuestionInput, QuestionnaireResult, SelectionMode, SelectedOption } from './types.js';
+import type {
+  NormalizedQuestion,
+  QuestionInput,
+  QuestionnaireResult,
+  SelectionMode,
+  SelectedOption,
+} from './types.js';
 import { runQuestionnaireUI } from './ui.js';
+
+/**
+ * Picks the flow that can run in this mode.
+ *
+ * `ctx.ui.custom()` is undefined outside the TUI, so RPC mode uses the
+ * dialog-based flow and every other mode uses the tabbed component.
+ */
+function runQuestionnaire(
+  ctx: Pick<ExtensionContext, 'ui' | 'mode'>,
+  questions: NormalizedQuestion[],
+): Promise<QuestionnaireResult> {
+  if (ctx.mode === 'rpc') return runQuestionnaireRpc(ctx, questions);
+
+  return runQuestionnaireUI(ctx, questions);
+}
 
 function emptyResult(error?: string): QuestionnaireResult {
   return {
@@ -126,7 +148,7 @@ export default function questionnaireExtension(pi: ExtensionAPI) {
         });
       }
 
-      const uiResult = await runQuestionnaireUI(ctx, normalizedQuestions);
+      const uiResult = await runQuestionnaire(ctx, normalizedQuestions);
 
       if (uiResult.cancelled) {
         return {
@@ -196,7 +218,7 @@ export default function questionnaireExtension(pi: ExtensionAPI) {
         return;
       }
 
-      const result = await runQuestionnaireUI(ctx, questions);
+      const result = await runQuestionnaire(ctx, questions);
       if (result.cancelled) {
         ctx.ui.notify(formatCancelledSummary(), 'warning');
         return;
