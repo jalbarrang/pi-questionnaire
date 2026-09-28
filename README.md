@@ -8,9 +8,22 @@ It adds:
 
 ## Install
 
+From GitHub (tracks `main`, so it carries the current UI):
+
 ```bash
-pi install npm:@dreki-gg/pi-questionnaire
+pi install git:github.com/jalbarrang/pi-questionnaire
 ```
+
+Pin a tag or commit to freeze a version:
+
+```bash
+pi install git:github.com/jalbarrang/pi-questionnaire@3cb2c3d
+```
+
+`pi update --extensions` reconciles the checkout with its ref.
+
+The npm release is published separately and can lag the repository, so the git
+source is the one to prefer while the UI is still moving.
 
 ## What it provides
 
