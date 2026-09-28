@@ -1,43 +1,14 @@
 name: release
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
-    inputs:
-      retry_publish:
-        description: Publish the current main version when no new release is created
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  release-please:
-    runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-    steps:
-      - id: release
-        uses: googleapis/release-please-action@v5
-        with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
   publish:
-    needs: release-please
-    # `always()` lets the manual recovery publish even when release-please fails;
-    # the condition below still gates it to a real release or an explicit retry.
-    if: >-
-      always() &&
-      (
-        needs.release-please.outputs.release_created == 'true' ||
-        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.retry_publish)
-      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
